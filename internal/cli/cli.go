@@ -1,5 +1,5 @@
 // Package cli is gander's own commands: install, pin, default, list, current, dir,
-// uninstall, and the self commands that install, update and remove gander.
+// uninstall, doctor, and the self commands that install, update and remove gander.
 package cli
 
 import (
@@ -53,6 +53,8 @@ Usage:
   gander current               Show the version in use here, why, and its path.
   gander dir                   Print the folder of the version in use.
   gander uninstall <version>   Remove a version.
+  gander doctor                Check that goose can build a program here, and say
+                               what to do about anything in the way.
 
   gander self install          Put gander in its home folder and on PATH; the
                                install script runs this. --no-modify-path leaves
@@ -95,6 +97,7 @@ var commands = []command{
 	{"current", cmdCurrent},
 	{"dir", cmdDir},
 	{"uninstall", cmdUninstall},
+	{"doctor", cmdDoctor},
 	{"self", cmdSelf},
 }
 

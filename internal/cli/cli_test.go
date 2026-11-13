@@ -229,3 +229,12 @@ func TestSelfCommands(t *testing.T) {
 		t.Error("gander's home is still there")
 	}
 }
+
+// doctor exits 1 when it finds a problem: here nothing is installed and goose isn't on
+// PATH.
+func TestDoctorExitCode(t *testing.T) {
+	f := newFixture(t)
+	if code := f.run("doctor"); code != 1 {
+		t.Errorf("doctor with nothing installed: exit %d, want 1\nstdout: %s", code, f.stdout.String())
+	}
+}
