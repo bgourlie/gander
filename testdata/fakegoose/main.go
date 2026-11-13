@@ -21,7 +21,9 @@ func main() {
 		fmt.Printf("goose %s (runtime test)\n", filepath.Base(filepath.Dir(exe)))
 		return
 	case len(args) == 2 && args[0] == "sleep":
-		os.WriteFile(args[1], []byte(strconv.Itoa(os.Getpid())), 0o644)
+		// Renamed into place, so the test never reads part of the number.
+		os.WriteFile(args[1]+".tmp", []byte(strconv.Itoa(os.Getpid())), 0o644)
+		os.Rename(args[1]+".tmp", args[1])
 		time.Sleep(time.Minute)
 		return
 	}

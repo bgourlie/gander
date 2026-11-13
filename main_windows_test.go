@@ -35,6 +35,7 @@ func TestProxyOnWindows(t *testing.T) {
 	}
 	child, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {
+		proxy.Process.Kill()
 		t.Fatal(err)
 	}
 	defer windows.CloseHandle(child)

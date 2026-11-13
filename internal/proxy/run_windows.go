@@ -47,12 +47,10 @@ func run(path string, args []string) int {
 	return cmd.ProcessState.ExitCode()
 }
 
-// joinJob puts the proxy in a job object that ends goose when the proxy ends: an editor
-// stops its language server by killing the process it started, which is the proxy, and
-// goose would live on (uv#17492). The proxy joins before starting goose, so goose starts
-// inside the job; adding goose after it starts races its exit (uv#18170). Without the
-// job, killing the proxy leaves goose running and nothing else goes wrong, so a failure
-// here stops nothing and prints nothing. It returns 0 when there's no job.
+// joinJob puts the proxy in a job that ends goose when the proxy is killed, as an editor
+// stops its language server; otherwise goose lives on (uv#17492). It joins before goose
+// starts, since adding goose afterwards races its exit (uv#18170). Without a job only
+// that is lost, so a failure is silent. It returns 0 when there's no job.
 func joinJob() windows.Handle {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
