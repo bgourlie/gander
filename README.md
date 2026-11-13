@@ -39,11 +39,16 @@ terminals and editors started afterwards.
 
 **GitHub Actions:** each step runs in a new shell that doesn't read your startup files, so the
 installer also adds `~/.gander/bin` to the job's PATH. `goose` works from the next step on,
-though not in the step that installs it.
+though not in the step that installs it. Give the job `GITHUB_TOKEN`, too: without a token,
+GitHub's API answers 60 requests an hour per IP address, and runners that share addresses,
+such as GitHub's macOS runners, can find that used up.
 
 ```yaml
-- run: curl -fsSL https://github.com/bgourlie/gander/releases/latest/download/install.sh | sh
-- run: goose version
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+steps:
+  - run: curl -fsSL https://github.com/bgourlie/gander/releases/latest/download/install.sh | sh
+  - run: goose version
 ```
 
 On a Windows runner, run `install.ps1` instead, with `shell: pwsh`.

@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,6 +50,8 @@ type Client struct {
 	API       string // the repository's API URL, such as DefaultAPI
 	Releases  string // the repository's releases page; downloads are under <Releases>/download
 	UserAgent string
+	// Token, if set, goes with every request to API, and nowhere else.
+	Token string
 
 	// StallTimeout aborts a download attempt that receives nothing for this long.
 	StallTimeout time.Duration
@@ -58,13 +61,17 @@ type Client struct {
 	Backoff time.Duration
 }
 
-// NewClient returns a client for Goose's releases on github.com.
+// NewClient returns a client for Goose's releases on github.com. Without a token,
+// GitHub's API allows 60 requests an hour per IP address, which runners that share
+// addresses, such as GitHub's own macOS runners, use up; so GITHUB_TOKEN is sent when
+// it's set, the name GitHub Actions and most tools use.
 func NewClient(userAgent string) *Client {
 	return &Client{
 		HTTP:         &http.Client{Transport: newTransport()},
 		API:          DefaultAPI,
 		Releases:     DefaultReleases,
 		UserAgent:    userAgent,
+		Token:        os.Getenv("GITHUB_TOKEN"),
 		StallTimeout: 180 * time.Second,
 		Retries:      4,
 		Backoff:      time.Second,
@@ -126,14 +133,23 @@ func (e *NotFoundError) Error() string {
 
 // RateLimitError means GitHub's API refused because its rate limit is used up.
 type RateLimitError struct {
-	Reset time.Time
+	Reset     time.Time
+	WithToken bool // the request carried GITHUB_TOKEN
 }
 
 func (e *RateLimitError) Error() string {
-	if e.Reset.IsZero() {
-		return "GitHub's API rate limit for this network is used up; try again later"
+	whose, when, then := "this network", "", "try again later"
+	if e.WithToken {
+		whose = "the token in GITHUB_TOKEN"
 	}
-	return "GitHub's API rate limit for this network is used up until " + e.Reset.Local().Format("15:04") + "; try again then"
+	if !e.Reset.IsZero() {
+		when, then = " until "+e.Reset.Local().Format("15:04"), "try again then"
+	}
+	msg := "GitHub's API rate limit for " + whose + " is used up" + when + "; " + then
+	if !e.WithToken {
+		msg += ", or set GITHUB_TOKEN to a GitHub token, which raises the limit"
+	}
+	return msg
 }
 
 // List returns every release, newest first.
@@ -209,6 +225,10 @@ func (c *Client) apiGet(ctx context.Context, p string, into any) error {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", c.UserAgent)
+	// Go's client drops it if the API ever redirects to another host.
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	resp, err := c.HTTP.Do(req.WithContext(ctx))
@@ -220,8 +240,10 @@ func (c *Client) apiGet(ctx context.Context, p string, into any) error {
 	case resp.StatusCode == http.StatusOK:
 	case resp.StatusCode == http.StatusNotFound:
 		return errNotFound
+	case resp.StatusCode == http.StatusUnauthorized && c.Token != "":
+		return errors.New("GitHub's API refused the token in GITHUB_TOKEN as bad credentials; replace it, or unset GITHUB_TOKEN")
 	case rateLimited(resp):
-		e := &RateLimitError{}
+		e := &RateLimitError{WithToken: c.Token != ""}
 		if s, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil {
 			e.Reset = time.Unix(s, 0)
 		}

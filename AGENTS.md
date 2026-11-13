@@ -50,9 +50,11 @@ when stderr is a terminal.
 
 ### Environment
 
-`GANDER_HOME`, `GANDER_GOOSE` and `GANDER_AUTO_INSTALL=0`; `install.sh` also reads
-`GANDER_VERSION`, a gander release to install instead of the latest. gander sends no GitHub
-token, so the API's limit is 60 requests an hour per IP address.
+`GANDER_HOME`, `GANDER_GOOSE` and `GANDER_AUTO_INSTALL=0`; the install scripts also read
+`GANDER_VERSION`, a gander release to install instead of the latest. `GITHUB_TOKEN`, when set,
+goes with requests to GitHub's API and nowhere else. Without it the API allows 60 requests an
+hour per IP address, which GitHub's macOS runners, sharing addresses, used up in gander's own
+CI; that's why token support, once removed, came back.
 
 ### Commands
 
@@ -235,9 +237,9 @@ Fewer, better tests; coverage for its own sake isn't a goal.
 - **Build for gander's scale.** Goose's archives are 10–13 MB, and each is checked against its
   hash before it's unpacked. Before adding a safeguard, setting or fallback, name what breaks
   for gander without it; otherwise prefer the simpler code and a clear error. Resumable
-  downloads, a lock timeout setting, GitHub token support, a lock PID file, unpacking limits,
-  a second glibc check and a `/releases/latest` fallback for Goose's releases were each built
-  and then removed for this reason.
+  downloads, a lock timeout setting, a lock PID file, unpacking limits, a second glibc check
+  and a `/releases/latest` fallback for Goose's releases were each built and then removed for
+  this reason.
 - **Output.** gander's commands print their results (`list`, `current`, `dir`) on stdout, and
   progress, warnings and errors on stderr; errors and warnings start with `gander`. gander's
   own exit codes are 0, 1 for a failure, 2 for a mistake on the command line, and 130 when
