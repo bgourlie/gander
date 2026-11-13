@@ -58,7 +58,7 @@ Usage:
 
   gander self install          Put gander in its home folder and on PATH; the
                                install script runs this. --no-modify-path leaves
-                               your shell's startup files alone.
+                               PATH alone.
   gander self update           Update gander to its latest release, or to the
                                release named after it.
   gander self uninstall        Remove gander, its PATH setup, and every version;
@@ -72,7 +72,8 @@ the default. A version named by one of the first three is installed on first use
 unless GANDER_AUTO_INSTALL=0.
 
 Environment:
-  GANDER_HOME            gander's folder (default ~/.gander)
+  GANDER_HOME            gander's folder (default ~/.gander, or
+                         %LOCALAPPDATA%\gander on Windows)
   GANDER_GOOSE           the version to use, over any pin
   GANDER_AUTO_INSTALL=0  never install from goose
 `

@@ -1,10 +1,10 @@
-# Publishes a release when a tag v* is pushed: tests, builds each platform, and creates
-# the GitHub release with the binaries, SHA256SUMS and install.sh in one step. Run it by
-# hand (workflow_dispatch) for a dry run that builds and prints the sums but publishes
-# nothing. A tag with a "-" (v0.1.0-rc.1) becomes a prerelease, which moves neither
-# releases/latest nor "go install ...@latest".
+# Publishes a release when a tag v* is pushed: tests on each OS (ci.yml), builds each
+# platform, and creates the GitHub release with the binaries, SHA256SUMS, install.sh and
+# install.ps1 in one step. Run it by hand (workflow_dispatch) for a dry run that builds
+# and prints the sums but publishes nothing. A tag with a "-" (v0.1.0-rc.1) becomes a
+# prerelease, which moves neither releases/latest nor "go install ...@latest".
 #
-# Asset names never change: install.sh and "gander self update" build them.
+# Asset names never change: the install scripts and "gander self update" build them.
 name: release
 
 on:
@@ -15,7 +15,13 @@ on:
 permissions: {}
 
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release; new repositories' tokens are read-only
@@ -30,9 +36,6 @@ jobs:
           check-latest: true # Go's newest patch release, not whatever the runner has
           cache: false
 
-      - run: go vet ./...
-      - run: go test -race ./...
-
       - name: Build
         env:
           # Without it, linux/amd64 is a native build here and needs the runner's glibc.
@@ -41,11 +44,14 @@ jobs:
           # Outside the checkout: Go stamps every build after an untracked file +dirty.
           dist="$RUNNER_TEMP/dist"
           mkdir "$dist"
-          for t in darwin/arm64:macos-arm64 darwin/amd64:macos-x64 linux/amd64:linux-x64; do
+          for t in darwin/arm64:macos-arm64 darwin/amd64:macos-x64 linux/amd64:linux-x64 windows/amd64:windows-x64; do
             goos=${t%%/*} rest=${t#*/}
-            GOOS=$goos GOARCH=${rest%%:*} go build -trimpath -o "$dist/gander-${rest#*:}" .
+            ext=
+            [ "$goos" = windows ] && ext=.exe
+            # No -s -w: stripped Go binaries get flagged by Microsoft Defender more often.
+            GOOS=$goos GOARCH=${rest%%:*} go build -trimpath -o "$dist/gander-${rest#*:}$ext" .
           done
-          cp install.sh "$dist/"
+          cp install.sh install.ps1 "$dist/"
           cd "$dist"
           sha256sum * > SHA256SUMS
           cat SHA256SUMS

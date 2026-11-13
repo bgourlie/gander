@@ -45,6 +45,9 @@ func TestEnvScript(t *testing.T) {
 }
 
 func TestStartupBlocks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("startup files are for Unix shells; Windows keeps PATH in the registry")
+	}
 	dir := t.TempDir()
 	block := blockStart + "\nif [ -f x ]; then . x; fi\n" + blockEnd + "\n"
 	read := func(p string) string { b, _ := os.ReadFile(p); return string(b) }

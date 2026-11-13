@@ -45,7 +45,7 @@ func (e *Env) commit(staged string) error {
 	if err := e.replaceGoose(staged); err != nil {
 		return err
 	}
-	if err := os.Rename(staged, e.gander()); err != nil {
+	if err := replace(staged, e.gander()); err != nil {
 		return fmt.Errorf("can't move the new gander into place at %s: %w", e.gander(), err)
 	}
 	return nil
@@ -62,7 +62,7 @@ func (e *Env) relink() error {
 // replaceGoose makes goose a hardlink to target, or a copy where a hardlink can't be
 // made, swapped in by a rename.
 func (e *Env) replaceGoose(target string) error {
-	tmp, err := tempPath(e.Home.BinDir(), ".goose-new-")
+	tmp, err := tempPath(e.Home.BinDir(), home.ExeName(".goose-new-*"))
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (e *Env) replaceGoose(target string) error {
 			return fmt.Errorf("can't create %s: %w", e.goose(), err)
 		}
 	}
-	if err := os.Rename(tmp, e.goose()); err != nil {
+	if err := replace(tmp, e.goose()); err != nil {
 		os.Remove(tmp)
 		return fmt.Errorf("can't create %s: %w", e.goose(), err)
 	}
@@ -80,7 +80,7 @@ func (e *Env) replaceGoose(target string) error {
 
 // stageCopy copies src to a new executable file in <home>/bin and returns its path.
 func (e *Env) stageCopy(src string) (string, error) {
-	tmp, err := tempPath(e.Home.BinDir(), ".gander-new-")
+	tmp, err := tempPath(e.Home.BinDir(), home.ExeName(".gander-new-*"))
 	if err != nil {
 		return "", err
 	}
@@ -90,9 +90,19 @@ func (e *Env) stageCopy(src string) (string, error) {
 	return tmp, nil
 }
 
-// tempPath returns an unused path in dir starting with prefix.
-func tempPath(dir, prefix string) (string, error) {
-	f, err := os.CreateTemp(dir, prefix+"*")
+// removeOld deletes the binaries that replace moved aside on Windows, once nothing runs
+// them.
+func (e *Env) removeOld() {
+	old, _ := filepath.Glob(filepath.Join(e.Home.BinDir(), ".g*-old-*"))
+	for _, p := range old {
+		os.Remove(p)
+	}
+}
+
+// tempPath returns an unused path in dir that matches pattern, as os.CreateTemp reads it.
+// A program gets ".exe" on Windows, where tryRun runs it.
+func tempPath(dir, pattern string) (string, error) {
+	f, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", fmt.Errorf("can't write in %s: %w", dir, err)
 	}

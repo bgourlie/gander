@@ -49,13 +49,14 @@ target() {
 		*) unsupported "Linux $arch" ;;
 		esac
 		;;
+	MINGW* | MSYS* | CYGWIN*) fail "on Windows, install gander from PowerShell: irm $repo/releases/latest/download/install.ps1 | iex" ;;
 	*) unsupported "$os $arch" ;;
 	esac
 }
 
 unsupported() {
 	say "gander: there's no build for $1, because Goose ships no compiler for it."
-	say "Builds exist for macOS (arm64 and x64) and Linux x64; Windows is coming."
+	say "Builds exist for macOS (arm64 and x64), Linux x64 and Windows x64."
 	case $1 in
 	Linux\ aarch64 | Linux\ arm64) say "In Docker on an Apple silicon Mac, use --platform linux/amd64." ;;
 	esac

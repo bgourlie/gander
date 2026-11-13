@@ -57,6 +57,11 @@ func Check(t Target) error { return check(t) }
 // do, where the OS's own error would mislead.
 func ExplainExecError(path string, err error) error { return explainExecError(path, err) }
 
+// Running reports whether a program is running from the file at path. Windows won't
+// delete such a file, so removing its folder would stop halfway. On other systems it's
+// always false: deleting a running program's file is fine there.
+func Running(path string) bool { return running(path) }
+
 // atLeast compares dotted version strings such as "13.3.1" and "13.3" numerically.
 // Parts that aren't numbers count as zero.
 func atLeast(have, want string) bool {

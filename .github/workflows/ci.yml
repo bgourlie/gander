@@ -1,0 +1,77 @@
+# Tests gander on each OS it ships for, on every push to a branch, and before every
+# release (release.yml calls this). The tests never reach the network, so a second job
+# then installs gander as a user would and uses it with Goose's real releases.
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      # Pinned by commit, since tags can be moved (GHSA-mrrh-fwg8-r2c3).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true # Go's newest patch release, not whatever the runner has
+          cache: false
+      - run: go vet ./...
+      # The race detector needs cgo on Windows, and so a C compiler gander doesn't need.
+      - run: go test ${{ runner.os != 'Windows' && '-race' || '' }} ./...
+
+  real:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: false
+      # Into gander's default home, with the runner's PATH changed as a user's would be:
+      # the startup files or the registry, and GITHUB_PATH for the steps after this one.
+      # It installs the latest Goose too.
+      - name: self install
+        run: |
+          exe="$RUNNER_TEMP/gander${{ runner.os == 'Windows' && '.exe' || '' }}"
+          go build -o "$exe" .
+          "$exe" self install
+      - name: Use Goose's releases
+        run: |
+          gander version
+          goose version
+          mkdir "$RUNNER_TEMP/project" && cd "$RUNNER_TEMP/project"
+          echo v2026.3 > .goose-version
+          goose version # installs v2026.3 on first use
+          goose +v2026.4 version
+          gander list
+          gander doctor
+      - name: self uninstall
+        if: always()
+        run: gander self uninstall -y
