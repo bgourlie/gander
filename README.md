@@ -29,11 +29,9 @@ $env:GANDER_VERSION = 'v0.3.0-rc.1'
 irm https://github.com/bgourlie/gander/releases/download/v0.3.0-rc.1/install.ps1 | iex
 ```
 
-Once Windows support is in a full release, this will be:
-
-```powershell
-irm https://github.com/bgourlie/gander/releases/latest/download/install.ps1 | iex
-```
+**Microsoft Defender** currently flags `gander.exe` as a virus (`Trojan:Win32/Bearfoos.A!ml`)
+and quarantines it after the install. The detection is a false positive, and I'm working on a
+way to address it.
 
 This puts `gander.exe` and `goose.exe` in `%LOCALAPPDATA%\gander\bin`, adds that folder to your
 PATH, and installs the latest Goose. They work in that PowerShell window straight away, and in
@@ -43,10 +41,6 @@ terminals and editors started afterwards.
 - `GANDER_HOME` and `GANDER_VERSION` work as above: `$env:GANDER_HOME = 'D:\gander'`.
 - Windows searches the system PATH before yours, so a `goose` installed for all users comes
   first. `gander doctor` names it.
-
-**Microsoft Defender** currently flags `gander.exe` as a virus (`Trojan:Win32/Bearfoos.A!ml`)
-and quarantines it after the install. The detection is a false positive, and I'm working on a
-way to address it.
 
 ### In GitHub Actions and Docker
 
