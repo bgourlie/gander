@@ -76,6 +76,7 @@ Environment:
                          %LOCALAPPDATA%\gander on Windows)
   GANDER_GOOSE           the version to use, over any pin
   GANDER_AUTO_INSTALL=0  never install from goose
+  GITHUB_TOKEN           sent to GitHub's API, which then allows more requests
 `
 
 // errUsage is returned for a malformed command line, and errHelp for a command's -h;

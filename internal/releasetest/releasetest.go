@@ -122,6 +122,7 @@ type Server struct {
 	RateLimited atomic.Bool
 
 	mu           sync.Mutex
+	token        string
 	assets       map[string][]byte // "<tag>/<name>" → bytes; gander's under "gander-<tag>"
 	downloads    map[string]int    // the same keys → completed GETs
 	hold         map[string]chan struct{}
@@ -336,8 +337,25 @@ func (s *Server) apiRelease(r Release) apiRelease {
 	return out
 }
 
+// RequireToken makes the API answer only requests that carry token, as GitHub does once
+// a network's limit without one is used up: requests without a token are rate limited,
+// and those with another are refused as bad credentials.
+func (s *Server) RequireToken(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.token = token
+}
+
 func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, p string) {
-	if s.RateLimited.Load() {
+	s.mu.Lock()
+	token := s.token
+	s.mu.Unlock()
+	auth := r.Header.Get("Authorization")
+	if token != "" && auth != "" && auth != "Bearer "+token {
+		http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
+		return
+	}
+	if s.RateLimited.Load() || token != "" && auth == "" {
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
 		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
