@@ -2,11 +2,12 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/bgourlie/gander/internal/home"
 	"github.com/bgourlie/gander/internal/version"
@@ -22,19 +23,16 @@ func Uninstall(ctx context.Context, h home.Home, v version.Version, stderr io.Wr
 	defer l.Release()
 	sweep(h, v)
 
-	// Rename the folder aside first: its marker goes with it in one step, so a removal
-	// that fails halfway never leaves something that looks installed.
+	// The marker goes first, so a removal that fails halfway leaves debris that the next
+	// install clears, never something that looks installed. The folder isn't renamed
+	// aside: OverlayFS refuses to rename a directory from a lower image layer (EXDEV,
+	// rustup#2949), as in a container built with this version already installed.
 	dest := h.VersionDir(v)
-	stage, err := os.MkdirTemp(h.VersionsDir(), strings.TrimSuffix(StagePattern(v), "*"))
-	if err != nil {
-		return fmt.Errorf("can't create a staging folder in %s: %w", h.VersionsDir(), err)
-	}
-	if err := os.Rename(dest, filepath.Join(stage, "tree")); err != nil {
-		os.Remove(stage)
+	if err := os.Remove(filepath.Join(dest, home.Marker)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("can't remove %s: %w", dest, err)
 	}
-	if err := os.RemoveAll(stage); err != nil {
-		return fmt.Errorf("removed %s, but couldn't delete all of %s (%w); delete it by hand", v, stage, err)
+	if err := os.RemoveAll(dest); err != nil {
+		return fmt.Errorf("removed %s, but couldn't delete all of %s (%w); delete it by hand", v, dest, err)
 	}
 	return nil
 }

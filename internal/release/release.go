@@ -1,5 +1,6 @@
 // Package release reads Goose's releases from GitHub: the release list, each asset's
-// checksum, and the archives themselves.
+// checksum, and the archives themselves. It also finds and fetches gander's own
+// releases for "gander self update".
 package release
 
 import (
@@ -27,6 +28,20 @@ const (
 	DefaultAPI      = "https://api.github.com/repos/aardappel/goose"
 	DefaultReleases = "https://github.com/aardappel/goose/releases"
 )
+
+// GanderReleases is where gander's own releases live. Each has a bare binary per
+// platform, named by GanderAsset, and a SHA256SUMS file.
+const GanderReleases = "https://github.com/bgourlie/gander/releases"
+
+// GanderAsset is the name of gander's own binary for t in a release. install.sh and
+// "gander self update" both build it, so it never changes.
+func GanderAsset(t platform.Target) string {
+	name := "gander-" + t.String()
+	if t.OS == "windows" {
+		name += ".exe"
+	}
+	return name
+}
 
 // Client talks to GitHub. The zero value isn't usable; see NewClient.
 type Client struct {
@@ -269,6 +284,60 @@ func (c *Client) Checksum(ctx context.Context, v version.Version, r *Release, na
 		return nil, "", fmt.Errorf("GitHub's digest for %s, %q, isn't a SHA-256", name, a.Digest)
 	}
 	return sum, "GitHub's digest for " + name, nil
+}
+
+// LatestTag returns the tag of the latest release, read from where <Releases>/latest
+// redirects. That's github.com, not the API, so it doesn't count against the API's
+// limit of 60 requests an hour (mise#14464). GitHub's latest is the newest release by
+// date that isn't a draft or prerelease, which suits gander's own releases.
+func (c *Client) LatestTag(ctx context.Context) (version.Version, error) {
+	url := c.Releases + "/latest"
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return version.Version{}, err
+	}
+	req.Header.Set("User-Agent", c.UserAgent)
+	hc := *c.HTTP
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := hc.Do(req)
+	if err != nil {
+		return version.Version{}, fmt.Errorf("can't reach %s (%w); check your network connection, and HTTPS_PROXY if you use a proxy", url, err)
+	}
+	resp.Body.Close()
+	loc := resp.Header.Get("Location")
+	i := strings.LastIndex(loc, "/releases/tag/")
+	switch {
+	case resp.StatusCode/100 != 3:
+		return version.Version{}, fmt.Errorf("%s answered %s; try again later", url, resp.Status)
+	case i < 0:
+		// With no release, GitHub redirects to the releases page.
+		return version.Version{}, fmt.Errorf("there's no published release at %s yet", c.Releases)
+	}
+	tag := loc[i+len("/releases/tag/"):]
+	v, err := version.Parse(tag)
+	if err != nil || v.String() != tag {
+		return version.Version{}, fmt.Errorf("the latest release at %s has the tag %q, which isn't a version", url, tag)
+	}
+	return v, nil
+}
+
+// SumFor returns the SHA-256 that release v's SHA256SUMS lists for name.
+func (c *Client) SumFor(ctx context.Context, v version.Version, name string) ([]byte, error) {
+	url := c.DownloadURL(v, SumsName)
+	data, err := c.fetchSmall(ctx, url)
+	if errors.Is(err, errNotFound) {
+		return nil, fmt.Errorf("release %s has no %s at %s", v, SumsName, url)
+	}
+	if err != nil {
+		return nil, err
+	}
+	sum, err := parseSums(data, name)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", url, err)
+	}
+	return sum, nil
 }
 
 // parseSums finds name in a SHA256SUMS file. Lines read "<hash>  <name>" or, in binary

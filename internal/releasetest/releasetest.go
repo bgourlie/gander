@@ -1,6 +1,7 @@
 // Package releasetest serves fake Goose releases from a local httptest server, so tests
 // never reach the network. Each fake release has small archives for every platform
-// holding a shell script named goose that prints a version.
+// holding a shell script named goose that prints a version. It can also serve fake
+// releases of gander itself, for "gander self update".
 package releasetest
 
 import (
@@ -120,10 +121,11 @@ type Server struct {
 	// RateLimited makes every API request fail as GitHub's rate limit does.
 	RateLimited atomic.Bool
 
-	mu        sync.Mutex
-	assets    map[string][]byte // "<tag>/<name>" → bytes
-	downloads map[string]int    // "<tag>/<name>" → completed GETs
-	hold      map[string]chan struct{}
+	mu           sync.Mutex
+	assets       map[string][]byte // "<tag>/<name>" → bytes; gander's under "gander-<tag>"
+	downloads    map[string]int    // the same keys → completed GETs
+	hold         map[string]chan struct{}
+	ganderLatest string
 }
 
 // New starts a server with these releases, in the order the API lists them (newest
@@ -188,6 +190,34 @@ func (s *Server) Client() *release.Client {
 	}
 }
 
+// AddGander serves a release of gander itself, tagged tag, with these binaries by asset
+// name and a SHA256SUMS for them. With latest, <releases>/latest redirects to it.
+func (s *Server) AddGander(tag string, latest bool, binaries map[string][]byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var sums strings.Builder
+	for name, data := range binaries {
+		s.assets[ganderKey(tag)+"/"+name] = data
+		fmt.Fprintf(&sums, "%x  %s\n", sha256.Sum256(data), name)
+	}
+	s.assets[ganderKey(tag)+"/"+release.SumsName] = []byte(sums.String())
+	if latest {
+		s.ganderLatest = tag
+	}
+}
+
+// GanderDownloads counts the completed downloads of an asset of gander's release tag.
+func (s *Server) GanderDownloads(tag, name string) int { return s.Downloads(ganderKey(tag), name) }
+
+func ganderKey(tag string) string { return "gander-" + tag }
+
+// GanderClient returns a client for gander's fake releases, as Client does for Goose's.
+func (s *Server) GanderClient() *release.Client {
+	c := s.Client()
+	c.Releases = s.URL + "/bgourlie/gander/releases"
+	return c
+}
+
 // Asset returns an asset's bytes.
 func (s *Server) Asset(tag, name string) []byte {
 	s.mu.Lock()
@@ -219,6 +249,22 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.serveAPI(w, r, strings.TrimPrefix(p, "/repos/aardappel/goose"))
 	case strings.HasPrefix(p, "/aardappel/goose/releases/download/"):
 		key := strings.TrimPrefix(p, "/aardappel/goose/releases/download/")
+		if s.Asset(dirOf(key), baseOf(key)) == nil {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/assets/"+key+"?signed=1", http.StatusFound)
+	case p == "/bgourlie/gander/releases/latest":
+		s.mu.Lock()
+		latest := s.ganderLatest
+		s.mu.Unlock()
+		if latest == "" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/bgourlie/gander/releases/tag/"+latest, http.StatusFound)
+	case strings.HasPrefix(p, "/bgourlie/gander/releases/download/"):
+		key := ganderKey(strings.TrimPrefix(p, "/bgourlie/gander/releases/download/"))
 		if s.Asset(dirOf(key), baseOf(key)) == nil {
 			http.NotFound(w, r)
 			return

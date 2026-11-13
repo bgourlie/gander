@@ -24,6 +24,7 @@ type fixture struct {
 	dir            string
 	vars           map[string]string
 	srv            *releasetest.Server
+	exe            string // the running gander, for the self commands
 	stdout, stderr bytes.Buffer
 }
 
@@ -65,7 +66,8 @@ func (f *fixture) run(args ...string) int {
 				Stderr: &f.stderr,
 			}, nil
 		},
-		NewClient: func() *release.Client { return f.srv.Client() },
+		NewClient:  func() *release.Client { return f.srv.Client() },
+		Executable: func() (string, error) { return f.exe, nil },
 	})
 }
 
@@ -195,5 +197,35 @@ func TestUninstall(t *testing.T) {
 	}
 	if code := f.run("uninstall", "v1.0"); code != 1 {
 		t.Errorf("uninstalling it again exited %d, want 1", code)
+	}
+}
+
+// "self install" installs the latest Goose as the default when none is set, and with
+// --no-modify-path touches no startup file. "self uninstall" asks first, so with no
+// terminal it needs -y.
+func TestSelfCommands(t *testing.T) {
+	f := newFixture(t)
+	user := filepath.Join(filepath.Dir(f.h.Dir), "user")
+	os.MkdirAll(user, 0o755)
+	f.vars["HOME"] = user
+	f.exe = filepath.Join(filepath.Dir(f.h.Dir), "download", "gander")
+	os.MkdirAll(filepath.Dir(f.exe), 0o755)
+	os.WriteFile(f.exe, []byte("#!/bin/sh\n"), 0o755)
+
+	f.mustRun("self", "install", "--no-modify-path")
+	if f.defaultVersion() != "v1.0" || !f.h.IsInstalled(version.MustParse("v1.0")) {
+		t.Errorf("default after self install: %q, want the latest, v1.0, installed", f.defaultVersion())
+	}
+	if entries, _ := os.ReadDir(user); len(entries) != 0 {
+		t.Errorf("--no-modify-path wrote %v in HOME", entries)
+	}
+
+	f.exe = filepath.Join(f.h.BinDir(), "gander")
+	if code := f.run("self", "uninstall"); code != 2 {
+		t.Errorf("self uninstall with no terminal and no -y: exit %d, want 2", code)
+	}
+	f.mustRun("self", "uninstall", "-y")
+	if _, err := os.Stat(f.h.Dir); err == nil {
+		t.Error("gander's home is still there")
 	}
 }

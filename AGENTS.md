@@ -50,8 +50,9 @@ when stderr is a terminal.
 
 ### Environment
 
-`GANDER_HOME`, `GANDER_GOOSE` and `GANDER_AUTO_INSTALL=0`. gander sends no GitHub token, so
-the API's limit is 60 requests an hour per IP address.
+`GANDER_HOME`, `GANDER_GOOSE` and `GANDER_AUTO_INSTALL=0`; `install.sh` also reads
+`GANDER_VERSION`, a gander release to install instead of the latest. gander sends no GitHub
+token, so the API's limit is 60 requests an hour per IP address.
 
 ### Commands
 
@@ -66,7 +67,9 @@ the API's limit is 60 requests an hour per IP address.
 | `gander dir` | The folder of the version in use (its `docs/`, `samples/`). |
 | `gander uninstall <version>` | Removes it. Uninstalling the default clears the default. |
 | `gander doctor` | Checks PATH order, other `goose` binaries, `GOOSE_STDLIB`/`GOOSE_TCCLIB`, OS minimums, and the active version's `goose toolchain --json`. |
-| `gander self update` | Updates gander. |
+| `gander self install [--no-modify-path]` | Copies the running gander to `<home>/bin` with `goose` beside it, and puts that folder on PATH; installs the latest Goose if there's no default. `install.sh` runs it, and running it again repairs an install. |
+| `gander self update [version]` | Updates the gander in `<home>/bin` to the latest release, never older unless a version is named. |
+| `gander self uninstall [-y]` | Removes gander's PATH setup, then only what gander made in `<home>`, versions included. |
 
 Say "version", never "toolchain": `goose toolchain` is Goose's command for the C compiler.
 
@@ -76,6 +79,8 @@ Say "version", never "toolchain": `goose toolchain` is Goose's command for the C
 <home>/                  ~/.gander, %LOCALAPPDATA%\gander on Windows; GANDER_HOME overrides
   bin/gander
   bin/goose              the same binary
+  bin/.g*-new-*          a new gander or goose, staged here and renamed into place
+  env                    sh that puts bin/ first on PATH; startup files source it
   default                one line: the default version
   versions/<tag>/        an unpacked release; complete only once .gander-installed exists
   versions/<tag>.lock    held while that version installs or uninstalls; never deleted
@@ -85,6 +90,19 @@ Say "version", never "toolchain": `goose toolchain` is Goose's command for the C
 `_` can't appear in a tag, so one version's staging pattern never matches another's.
 
 gander leaves Goose's own `GOOSE_HOME` (`~/.goose`) alone; versions share it safely.
+
+### Installing gander
+
+- `install.sh` (POSIX sh, curl only) checks the platform against a fixed list, reads the
+  latest tag from where `releases/latest` redirects, downloads `gander-<os>-<arch>` and
+  `SHA256SUMS` from that tag, compares the hash, and runs `gander self install "$@"`.
+- Startup files get a marked block that sources `<home>/env`, guarded with `if [ -f ... ]`:
+  `.profile` always; `.bash_profile`, `.bash_login` and `.bashrc` if they exist; `.zshenv` and
+  `.zshrc` if zsh is the shell or on PATH; fish gets `conf.d/gander.fish`. A file that can't be
+  written is a warning. `$GITHUB_PATH` gets `<home>/bin` too.
+- gander's own release assets are bare binaries named `gander-macos-arm64`, `gander-macos-x64`
+  and `gander-linux-x64` (`.exe` on Windows, later), plus `SHA256SUMS` and `install.sh`.
+  `install.sh` and `self update` build these names, so they never change.
 
 ### Goose's releases
 
@@ -116,16 +134,20 @@ internal/
   lock/          per-version file locks (flock; LockFileEx on Windows)
   proxy/         gander as goose: Prepare picks and installs, then run_<os>.go execs
   cli/           gander's commands
+  self/          gander installing, updating and removing itself; the env script and
+                 startup-file blocks
   fsutil/        write a new file and rename it into place
   term/          whether stderr is a terminal
   buildinfo/     gander's own version
   releasetest/   a fake GitHub for tests: an httptest server and small archives
+install.sh       the curl | sh installer
+.github/workflows/release.yml   builds and publishes a release when a v* tag is pushed
 ```
 
-Not built yet: the Windows proxy (`proxy/run_windows.go` is a stub), `doctor`, `update`,
-`self update`, the install scripts and PATH setup. The Linux-only code (the glibc check, the
-exec error translation, the NixOS hint) and the Windows code compile and pass vet, but have
-never run.
+Not built yet: the Windows proxy (`proxy/run_windows.go` is a stub), `doctor`, `update`, and
+on Windows `install.ps1`, PATH in the registry and self-update. The Linux-only code (the glibc
+check, the exec error translation, the NixOS hint) and the Windows code compile and pass vet,
+but have never run.
 
 ## Build and test
 
@@ -153,6 +175,14 @@ To check against Goose's real releases, build gander into a scratch folder, hard
 `~/.gander`. Then run `gander install v2026.4`, `goose version`, and `goose +v2026.3 version`
 from a folder with a `.goose-version`.
 
+### Releasing
+
+Push a tag `vX.Y.Z` and the release workflow tests, builds and publishes. Run the workflow by
+hand for a dry run, and rehearse a change to it with an rc tag (`v0.1.0-rc.1`, published as a
+prerelease) and `GANDER_VERSION=v0.1.0-rc.1` for `install.sh`. Go's checksum database
+remembers every tag, and immutable releases lock them, so never move or reuse a tag; fix
+forward.
+
 ### Tests
 
 Fewer, better tests; coverage for its own sake isn't a goal.
@@ -179,14 +209,16 @@ Fewer, better tests; coverage for its own sake isn't a goal.
 - **The proxy never searches PATH for the compiler** and never uses the network except to
   auto-install. It runs the version's absolute path: `syscall.Exec` on Unix; on Windows a child
   with stdio passed through and its exit code returned.
-- **Never change a file in place.** Write a new file and rename it over the old one.
+- **Never change a file in place.** Write a new file and rename it over the old one. The one
+  exception is the user's shell startup files: gander appends to them and cuts its block out
+  in place, because a rename would replace a symlink into their dotfiles with a plain file.
 - **Errors say what to do next**, and name the file, version or platform at fault.
 - **Build for gander's scale.** Goose's archives are 10–13 MB, and each is checked against its
   hash before it's unpacked. Before adding a safeguard, setting or fallback, name what breaks
   for gander without it; otherwise prefer the simpler code and a clear error. Resumable
   downloads, a lock timeout setting, GitHub token support, a lock PID file, unpacking limits,
-  a second glibc check and a `/releases/latest` fallback were each built and then removed for
-  this reason.
+  a second glibc check and a `/releases/latest` fallback for Goose's releases were each built
+  and then removed for this reason.
 - **Output.** gander's commands print their results (`list`, `current`, `dir`) on stdout, and
   progress, warnings and errors on stderr; errors and warnings start with `gander`. gander's
   own exit codes are 0, 1 for a failure, 2 for a mistake on the command line, and 130 when

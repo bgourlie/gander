@@ -1,5 +1,5 @@
-// Package cli is gander's own commands: install, pin, default, list, current, dir and
-// uninstall.
+// Package cli is gander's own commands: install, pin, default, list, current, dir,
+// uninstall, and the self commands that install, update and remove gander.
 package cli
 
 import (
@@ -28,9 +28,17 @@ type Env struct {
 	Home           home.Home
 	// WorkingDir returns the physical current directory.
 	WorkingDir func() (string, error)
-	// NewInstaller and NewClient are called only by commands that need them.
-	NewInstaller func() (*install.Installer, error)
-	NewClient    func() *release.Client
+	// NewInstaller and NewClient are called only by commands that need them, and
+	// NewSelfClient, for gander's own releases, only by "self update".
+	NewInstaller  func() (*install.Installer, error)
+	NewClient     func() *release.Client
+	NewSelfClient func() *release.Client
+
+	// Executable returns the running gander's path, for the self commands.
+	Executable func() (string, error)
+	// Stdin and StdinIsTerminal are for "self uninstall"'s question.
+	Stdin           io.Reader
+	StdinIsTerminal bool
 }
 
 const usage = `gander installs and switches between versions of the Goose compiler.
@@ -45,6 +53,14 @@ Usage:
   gander current               Show the version in use here, why, and its path.
   gander dir                   Print the folder of the version in use.
   gander uninstall <version>   Remove a version.
+
+  gander self install          Put gander in its home folder and on PATH; the
+                               install script runs this. --no-modify-path leaves
+                               your shell's startup files alone.
+  gander self update           Update gander to its latest release, or to the
+                               release named after it.
+  gander self uninstall        Remove gander, its PATH setup, and every version;
+                               -y skips the question.
 
 A version is a release tag, such as v2026.4, or "latest".
 
@@ -79,6 +95,7 @@ var commands = []command{
 	{"current", cmdCurrent},
 	{"dir", cmdDir},
 	{"uninstall", cmdUninstall},
+	{"self", cmdSelf},
 }
 
 // Run runs one command and returns the exit code.
@@ -153,6 +170,14 @@ func Main() int {
 		NewClient: func() *release.Client {
 			return release.NewClient(buildinfo.UserAgent())
 		},
+		NewSelfClient: func() *release.Client {
+			c := release.NewClient(buildinfo.UserAgent())
+			c.Releases = release.GanderReleases
+			return c
+		},
+		Executable:      os.Executable,
+		Stdin:           os.Stdin,
+		StdinIsTerminal: term.IsTerminal(os.Stdin),
 	})
 }
 

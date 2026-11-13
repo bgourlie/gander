@@ -1,6 +1,7 @@
 // Package home knows the layout of gander's home folder:
 //
 //	<home>/bin/gander, bin/goose   the same binary
+//	<home>/env                     sh that puts bin/ on PATH (see package self)
 //	<home>/default                 one line: the default version
 //	<home>/versions/<tag>/         an unpacked release, complete once .gander-installed exists
 //	<home>/versions/<tag>.lock     held while that version installs
