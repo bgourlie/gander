@@ -52,9 +52,10 @@ when stderr is a terminal.
 
 `GANDER_HOME`, `GANDER_GOOSE` and `GANDER_AUTO_INSTALL=0`; the install scripts also read
 `GANDER_VERSION`, a gander release to install instead of the latest. `GITHUB_TOKEN`, when set,
-goes with requests to GitHub's API and nowhere else. Without it the API allows 60 requests an
-hour per IP address, which GitHub's macOS runners, sharing addresses, used up in gander's own
-CI; that's why token support, once removed, came back.
+goes with requests to GitHub's API and nowhere else; a token GitHub refuses, such as one for a
+GitHub Enterprise server, is left out. Without it the API allows 60 requests an hour per IP
+address, which GitHub's macOS runners, sharing addresses, used up in gander's own CI; that's
+why token support, once removed, came back.
 
 ### Commands
 
