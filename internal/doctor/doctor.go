@@ -12,11 +12,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/bgourlie/gander/internal/fsutil"
 	"github.com/bgourlie/gander/internal/home"
 	"github.com/bgourlie/gander/internal/platform"
 	"github.com/bgourlie/gander/internal/resolve"
@@ -79,7 +79,7 @@ func pathCheck(env Env) Check {
 	c := Check{Name: "path"}
 	bin := env.Home.BinDir()
 	ours := filepath.Join(bin, home.ExeName("goose"))
-	found := onPath(env.Getenv("PATH"), home.ExeName("goose"))
+	found := fsutil.OnPath(env.Getenv("PATH"), "goose")
 	at := slices.IndexFunc(found, func(p string) bool { return sameFile(p, ours) })
 	switch {
 	case at < 0:
@@ -100,24 +100,6 @@ func pathCheck(env Env) Check {
 		c.Summary = fmt.Sprintf("goose on PATH is gander's, in %s", bin)
 	}
 	return c
-}
-
-// onPath lists every executable file named name in PATH's folders, in order. An empty
-// entry means the current folder to a shell, which changes from one command to the
-// next, so it isn't counted.
-func onPath(path, name string) []string {
-	var found []string
-	for _, dir := range filepath.SplitList(path) {
-		if dir == "" {
-			continue
-		}
-		p := filepath.Join(dir, name)
-		fi, err := os.Stat(p)
-		if err == nil && fi.Mode().IsRegular() && (runtime.GOOS == "windows" || fi.Mode()&0o111 != 0) {
-			found = append(found, p)
-		}
-	}
-	return found
 }
 
 func sameFile(a, b string) bool {

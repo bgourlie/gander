@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bgourlie/gander/internal/fsutil"
 	"github.com/bgourlie/gander/internal/home"
 	"github.com/bgourlie/gander/internal/lock"
 	"github.com/bgourlie/gander/internal/platform"
@@ -160,10 +161,10 @@ func (in *Installer) install(ctx context.Context, v version.Version) error {
 	dest := in.Home.VersionDir(v)
 	// A folder without the marker is an unfinished install from some earlier failure;
 	// we hold the lock, so nobody else is using it.
-	if err := os.RemoveAll(dest); err != nil {
+	if err := fsutil.RemoveAll(dest); err != nil {
 		return fmt.Errorf("can't remove the unfinished install at %s: %w", dest, err)
 	}
-	if err := os.Rename(tree, dest); err != nil {
+	if err := fsutil.Rename(tree, dest); err != nil {
 		return fmt.Errorf("can't move %s into place at %s: %w", v, dest, err)
 	}
 	return nil

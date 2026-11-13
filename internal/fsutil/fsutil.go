@@ -3,6 +3,7 @@ package fsutil
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -36,9 +37,37 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := Rename(tmp, path); err != nil {
 		return err
 	}
 	ok = true
 	return nil
+}
+
+// Rename renames old to new, retrying on Windows while antivirus holds either one.
+func Rename(old, new string) error {
+	return retry(func() error { return os.Rename(old, new) })
+}
+
+// RemoveAll removes path and everything in it, retrying on Windows while antivirus holds
+// a file.
+func RemoveAll(path string) error {
+	return retry(func() error { return os.RemoveAll(path) })
+}
+
+// OnPath lists the programs called name in the folders of path, a PATH value, in the
+// order a shell searches them. On Windows each of PATHEXT's extensions is tried, so
+// "goose" finds goose.exe and goose.cmd. Relative folders are skipped, since what they
+// hold depends on the current folder.
+func OnPath(path, name string) []string {
+	var found []string
+	for _, dir := range filepath.SplitList(path) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		if p, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
+			found = append(found, p)
+		}
+	}
+	return found
 }

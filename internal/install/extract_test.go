@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/bgourlie/gander/internal/releasetest"
@@ -53,10 +54,11 @@ func TestExtract(t *testing.T) {
 		if err := extract(archive, dest, prefix); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if fi, err := os.Stat(filepath.Join(dest, "goose")); err != nil || fi.Mode().Perm()&0o100 == 0 {
+		// Windows has no execute bit to check.
+		if fi, err := os.Stat(filepath.Join(dest, "goose")); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm()&0o100 == 0 {
 			t.Errorf("%s: goose isn't executable: %v", name, err)
 		}
-		if fi, err := os.Stat(filepath.Join(dest, "stdlib", "std.goose")); err != nil || fi.Mode().Perm()&0o111 != 0 {
+		if fi, err := os.Stat(filepath.Join(dest, "stdlib", "std.goose")); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm()&0o111 != 0 {
 			t.Errorf("%s: std.goose should be a plain file: %v", name, err)
 		}
 		if _, err := os.Stat(filepath.Join(dest, "._goose")); err == nil {

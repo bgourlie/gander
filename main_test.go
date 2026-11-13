@@ -3,24 +3,54 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bgourlie/gander/internal/home"
-	"github.com/bgourlie/gander/internal/releasetest"
 )
 
 // TestMain lets the test binary stand in for gander: run under the name goose or gander,
 // it runs main instead of the tests.
 func TestMain(m *testing.M) {
-	if isProxy(os.Args[0]) || filepath.Base(os.Args[0]) == "gander" {
+	if isProxy(os.Args[0]) || strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == "gander" {
 		main()
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	if fakeDir != "" {
+		os.RemoveAll(fakeDir)
+	}
+	os.Exit(code)
+}
+
+var (
+	fakeOnce sync.Once
+	fakeDir  string
+	fakeErr  error
+)
+
+// fakeCompiler builds testdata/fakegoose once, and returns its path.
+func fakeCompiler(t *testing.T) string {
+	t.Helper()
+	fakeOnce.Do(func() {
+		if fakeDir, fakeErr = os.MkdirTemp("", "fakegoose-"); fakeErr != nil {
+			return
+		}
+		// go test puts its own go first on PATH.
+		cmd := exec.Command("go", "build", "-o", filepath.Join(fakeDir, home.ExeName("goose")), "./testdata/fakegoose")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			fakeErr = fmt.Errorf("building the fake compiler: %v\n%s", err, out)
+		}
+	})
+	if fakeErr != nil {
+		t.Fatal(fakeErr)
+	}
+	return filepath.Join(fakeDir, home.ExeName("goose"))
 }
 
 func TestIsProxy(t *testing.T) {
@@ -55,9 +85,7 @@ type e2e struct {
 
 func newE2E(t *testing.T) *e2e {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the proxy execs, which is Unix only")
-	}
+	fake := fakeCompiler(t)
 	tmp, _ := filepath.EvalSymlinks(t.TempDir())
 	e := &e2e{t: t, bin: filepath.Join(tmp, "bin"), home: home.Home{Dir: filepath.Join(tmp, "home")}, proj: filepath.Join(tmp, "proj")}
 	os.MkdirAll(e.bin, 0o755)
@@ -67,44 +95,37 @@ func newE2E(t *testing.T) *e2e {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"goose", "gander"} {
-		dst := filepath.Join(e.bin, name)
-		// A hardlink fails across filesystems, such as a tmpfs /tmp on CI; copy instead,
-		// as gander itself falls back to a copy.
-		if err := os.Link(self, dst); err != nil {
-			data, rerr := os.ReadFile(self)
-			if rerr != nil {
-				t.Fatal(rerr)
-			}
-			if err := os.WriteFile(dst, data, 0o755); err != nil {
-				t.Fatal(err)
-			}
-		}
+		linkOrCopy(t, self, filepath.Join(e.bin, home.ExeName(name)))
 	}
 	// Installed by hand, so these tests need no server.
 	for _, tag := range []string{"v1.0", "v0.9"} {
 		d := filepath.Join(e.home.VersionsDir(), tag)
 		os.MkdirAll(d, 0o755)
-		script := strings.Replace(releasetest.Script, "$REPORT", "goose "+tag+" (runtime test)", 1)
-		os.WriteFile(filepath.Join(d, "goose"), []byte(script), 0o755)
+		linkOrCopy(t, fake, filepath.Join(d, home.ExeName("goose")))
 		os.WriteFile(filepath.Join(d, home.Marker), nil, 0o644)
 	}
 	return e
 }
 
+// linkOrCopy hardlinks src as dst. A hardlink fails across filesystems, such as a tmpfs
+// /tmp on CI; then it copies instead, as gander itself does.
+func linkOrCopy(t *testing.T, src, dst string) {
+	t.Helper()
+	if err := os.Link(src, dst); err != nil {
+		data, rerr := os.ReadFile(src)
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		if err := os.WriteFile(dst, data, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // run runs bin/<name> in dir and returns stdout, stderr and the exit code.
 func (e *e2e) run(dir, name string, env []string, args ...string) (string, string, int) {
 	e.t.Helper()
-	cmd := exec.Command(filepath.Join(e.bin, name), args...)
-	cmd.Dir = dir
-	cmd.Env = append([]string{
-		"PATH=/usr/bin:/bin",
-		"HOME=" + filepath.Dir(e.home.Dir),
-		"GANDER_HOME=" + e.home.Dir,
-		// Nothing here may reach the network.
-		"GANDER_AUTO_INSTALL=0",
-		"HTTPS_PROXY=http://127.0.0.1:9",
-		"HTTP_PROXY=http://127.0.0.1:9",
-	}, env...)
+	cmd := e.command(dir, name, env, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -118,10 +139,28 @@ func (e *e2e) run(dir, name string, env []string, args ...string) (string, strin
 	return stdout.String(), stderr.String(), code
 }
 
+// command is bin/<name> with args, to run in dir with only gander's variables and env.
+func (e *e2e) command(dir, name string, env []string, args ...string) *exec.Cmd {
+	cmd := exec.Command(filepath.Join(e.bin, home.ExeName(name)), args...)
+	cmd.Dir = dir
+	cmd.Env = append([]string{
+		// Windows programs need SystemRoot; elsewhere it's empty and unused.
+		"SystemRoot=" + os.Getenv("SystemRoot"),
+		"PATH=/usr/bin:/bin",
+		"HOME=" + filepath.Dir(e.home.Dir),
+		"GANDER_HOME=" + e.home.Dir,
+		// Nothing here may reach the network.
+		"GANDER_AUTO_INSTALL=0",
+		"HTTPS_PROXY=http://127.0.0.1:9",
+		"HTTP_PROXY=http://127.0.0.1:9",
+	}, env...)
+	return cmd
+}
+
 func TestProxyExecs(t *testing.T) {
 	e := newE2E(t)
 	stdout, stderr, code := e.run(e.proj, "goose", []string{"GOOSE_TEST_EXIT=3"}, "+v1.0", "build", "a b", "", "+v0.9")
-	compiler := filepath.Join(e.home.VersionsDir(), "v1.0", "goose")
+	compiler := filepath.Join(e.home.VersionsDir(), "v1.0", home.ExeName("goose"))
 	want := "argv0=" + compiler + "\narg=build\narg=a b\narg=\narg=+v0.9\n"
 	if stdout != want || stderr != "" || code != 3 {
 		t.Errorf("goose +v1.0 ... gave exit %d\nstdout:\n%s\nwant:\n%s\nstderr:\n%s", code, stdout, want, stderr)

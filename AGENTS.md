@@ -80,6 +80,8 @@ Say "version", never "toolchain": `goose toolchain` is Goose's command for the C
   bin/gander
   bin/goose              the same binary
   bin/.g*-new-*          a new gander or goose, staged here and renamed into place
+  bin/.g*-old-*          on Windows, a gander or goose an update moved aside while it ran;
+                         deleted by the next self install or update once it has stopped
   env                    sh that puts bin/ first on PATH; startup files source it
   default                one line: the default version
   versions/<tag>/        an unpacked release; complete only once .gander-installed exists
@@ -98,13 +100,20 @@ gander leaves Goose's own `GOOSE_HOME` (`~/.goose`) alone; versions share it saf
 - `install.sh` (POSIX sh, curl only) checks the platform against a fixed list, reads the
   latest tag from where `releases/latest` redirects, downloads `gander-<os>-<arch>` and
   `SHA256SUMS` from that tag, compares the hash, and runs `gander self install "$@"`.
-- Startup files get a marked block that sources `<home>/env`, guarded with `if [ -f ... ]`:
-  `.profile` always; `.bash_profile`, `.bash_login` and `.bashrc` if they exist; `.zshenv` and
-  `.zshrc` if zsh is the shell or on PATH; fish gets `conf.d/gander.fish`. A file that can't be
-  written is a warning. `$GITHUB_PATH` gets `<home>/bin` too.
-- gander's own release assets are bare binaries named `gander-macos-arm64`, `gander-macos-x64`
-  and `gander-linux-x64` (`.exe` on Windows, later), plus `SHA256SUMS` and `install.sh`.
-  `install.sh` and `self update` build these names, so they never change.
+- `install.ps1` does the same on Windows, for Windows PowerShell 5.1 and later, run with
+  `irm | iex`. It is one script block that never calls `exit` (which would close the user's
+  window), and finally puts `<home>\bin` on that session's PATH too. ASCII only: 5.1 reads a
+  script without a BOM in the system code page.
+- On Unix, startup files get a marked block that sources `<home>/env`, guarded with
+  `if [ -f ... ]`: `.profile` always; `.bash_profile`, `.bash_login` and `.bashrc` if they
+  exist; `.zshenv` and `.zshrc` if zsh is the shell or on PATH; fish gets
+  `conf.d/gander.fish`. A file that can't be written is a warning.
+- On Windows, `<home>\bin` goes first in the user's `Path` in `HKCU\Environment`, read and
+  written raw so `%VARS%` and the value's type stay, then `WM_SETTINGCHANGE` is broadcast.
+- `$GITHUB_PATH` gets `<home>/bin` too, on every OS.
+- gander's own release assets are bare binaries named `gander-macos-arm64`, `gander-macos-x64`,
+  `gander-linux-x64` and `gander-windows-x64.exe`, plus `SHA256SUMS`, `install.sh` and
+  `install.ps1`. The install scripts and `self update` build these names, so they never change.
 
 ### Goose's releases
 
@@ -130,27 +139,29 @@ internal/
   versionfile/   reading and writing .goose-version and <home>/default
   home/          the layout of <home>: the default, installed versions
   resolve/       the resolver: version, reason, compiler path
-  platform/      the build for this machine, OS minimums, exec errors (a file per OS)
+  platform/      the build for this machine, OS minimums, exec errors, and whether a
+                 program is running (a file per OS)
   release/       GitHub's release list, checksums, downloads with retries
   install/       lock, download, verify, extract, check, commit; and uninstall
   lock/          per-version file locks (flock; LockFileEx on Windows)
   proxy/         gander as goose: Prepare picks and installs, then run_<os>.go execs
   cli/           gander's commands
   doctor/        gander doctor's checks, and on macOS the SDK retry
-  self/          gander installing, updating and removing itself; the env script and
-                 startup-file blocks
-  fsutil/        write a new file and rename it into place
+  self/          gander installing, updating and removing itself; on Unix the env script
+                 and startup-file blocks, on Windows the PATH in the registry
+  fsutil/        write a new file and rename it into place; renames and removals that
+                 retry while Windows antivirus holds a file; finding programs on PATH
   term/          whether stderr is a terminal
   buildinfo/     gander's own version
   releasetest/   a fake GitHub for tests: an httptest server and small archives
+testdata/fakegoose/  the fake compiler main_test.go builds
 install.sh       the curl | sh installer
+install.ps1      the irm | iex installer for Windows
+.github/workflows/ci.yml        tests on each OS, then uses real Goose releases
 .github/workflows/release.yml   builds and publishes a release when a v* tag is pushed
 ```
 
-Not built yet: the Windows proxy (`proxy/run_windows.go` is a stub), `update`, and
-on Windows `install.ps1`, PATH in the registry and self-update. The Linux-only code (the glibc
-check, the exec error translation, the NixOS hint) and the Windows code compile and pass vet,
-but have never run.
+Not built yet: `update`. The Linux exec error translation and NixOS hint have never run.
 
 ## Build and test
 
@@ -161,17 +172,22 @@ go build ./...
 go vet ./...
 GOOS=linux go vet ./...
 GOOS=windows go vet ./...
-go test -race ./...
+go test -race ./...   # without -race on Windows, where it needs cgo
 ```
 
 Vet for every OS gander ships for: code behind build tags for another OS isn't compiled
 otherwise.
 
 Tests never reach the network: installs are tested against a local `httptest` server
-(`internal/releasetest`) that serves small fake release archives and a fake release list. The
-fake compiler is a shell script, so install and proxy tests skip on Windows. `main_test.go`
-hardlinks the test binary as `goose` and `gander` (copying it where it can't) to test the real
-exec.
+(`internal/releasetest`) that serves small fake release archives and a fake release list. That
+fake compiler is a shell script, so the install, proxy, self, cli and doctor tests skip on
+Windows. `main_test.go` instead builds `testdata/fakegoose` and hardlinks the test binary as
+`goose` and `gander` (copying it where it can't), so the real proxy runs on every OS. The
+`_windows_test.go` files cover the job object, the registry PATH, and replacing and removing
+programs while they run.
+
+CI (`ci.yml`) runs the tests on Linux, macOS and Windows on every push to a branch, then
+installs gander with `self install` on each and uses Goose's real releases.
 
 To check against Goose's real releases, build gander into a scratch folder, hardlink it as
 `goose` beside itself, and set `GANDER_HOME` to a scratch folder too, never your own

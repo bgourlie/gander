@@ -75,7 +75,7 @@ func selfInstall(ctx context.Context, env *Env, s *self.Env, args []string) erro
 			gooseErr = fmt.Errorf("gander is installed, but Goose isn't: %w; once that's fixed, run \"gander install\"", err)
 		}
 	}
-	fmt.Fprint(env.Stderr, s.NextSteps())
+	fmt.Fprint(env.Stderr, s.NextSteps(!noModifyPath))
 	return gooseErr
 }
 

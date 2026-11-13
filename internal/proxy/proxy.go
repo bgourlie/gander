@@ -104,7 +104,7 @@ func isSelf(fi os.FileInfo) bool {
 }
 
 // Main runs the proxy and returns the exit code. On Unix it doesn't return when the
-// compiler starts.
+// compiler starts; on Windows it returns the compiler's exit code.
 func Main() int {
 	h, err := home.FromEnv(os.Getenv)
 	if err != nil {

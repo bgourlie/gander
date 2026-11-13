@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bgourlie/gander/internal/home"
 	"github.com/bgourlie/gander/internal/platform"
 	"github.com/bgourlie/gander/internal/release"
 	"github.com/bgourlie/gander/internal/version"
@@ -29,6 +30,7 @@ func (u *Updater) Update(ctx context.Context, want version.Version) error {
 	if err := u.owned("update"); err != nil {
 		return err
 	}
+	u.removeOld()
 	cur, curErr := version.Parse(u.Current)
 	isRelease := curErr == nil && cur.String() == u.Current
 	tag := want
@@ -52,7 +54,7 @@ func (u *Updater) Update(ctx context.Context, want version.Version) error {
 	if err != nil {
 		return err
 	}
-	staged, err := tempPath(u.Home.BinDir(), ".gander-new-")
+	staged, err := tempPath(u.Home.BinDir(), home.ExeName(".gander-new-*"))
 	if err != nil {
 		return err
 	}

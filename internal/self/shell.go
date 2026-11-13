@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bgourlie/gander/internal/fsutil"
 )
 
 // The lines around gander's block in a startup file. Plain "# pnpm" markers once paired
@@ -110,22 +112,7 @@ func (e *Env) hasShell(name string) bool {
 	if filepath.Base(e.Getenv("SHELL")) == name {
 		return true
 	}
-	return len(e.onPath(name)) > 0
-}
-
-// onPath lists the executables called name in PATH's folders, in order.
-func (e *Env) onPath(name string) []string {
-	var found []string
-	for _, dir := range filepath.SplitList(e.Getenv("PATH")) {
-		if !filepath.IsAbs(dir) {
-			continue
-		}
-		p := filepath.Join(dir, name)
-		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0 {
-			found = append(found, p)
-		}
-	}
-	return found
+	return len(fsutil.OnPath(e.Getenv("PATH"), name)) > 0
 }
 
 // addBlock appends block to the startup file at path, creating it if needed, unless the

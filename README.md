@@ -20,7 +20,20 @@ startup files, and installs the latest Goose. Open a new terminal, or run
 - `GANDER_HOME=/some/folder` installs there instead; `GANDER_VERSION=v0.1.0` installs that
   release of gander.
 
-Windows is coming.
+On Windows (x64, or Arm from Windows 11), in PowerShell:
+
+```powershell
+irm https://github.com/bgourlie/gander/releases/latest/download/install.ps1 | iex
+```
+
+This puts `gander.exe` and `goose.exe` in `%LOCALAPPDATA%\gander\bin`, adds that folder to your
+PATH, and installs the latest Goose. They work in that PowerShell window straight away, and in
+terminals and editors started afterwards.
+
+- To leave PATH alone: `& ([scriptblock]::Create((irm .../install.ps1))) --no-modify-path`.
+- `GANDER_HOME` and `GANDER_VERSION` work as above: `$env:GANDER_HOME = 'D:\gander'`.
+- Windows searches the system PATH before yours, so a `goose` installed for all users comes
+  first. `gander doctor` names it.
 
 ### In GitHub Actions and Docker
 
@@ -32,6 +45,8 @@ though not in the step that installs it.
 - run: curl -fsSL https://github.com/bgourlie/gander/releases/latest/download/install.sh | sh
 - run: goose version
 ```
+
+On a Windows runner, run `install.ps1` instead, with `shell: pwsh`.
 
 **Docker:** `RUN` lines don't read startup files either, so put the folder on PATH yourself with
 `ENV`. It's in the home folder of the user who ran the installer, which is `/root` unless your
@@ -65,6 +80,11 @@ On macOS, a file downloaded in a browser is quarantined, and macOS won't run it 
 isn't notarized by Apple. Clear the quarantine first with
 `xattr -d com.apple.quarantine gander-macos-arm64`. The install script doesn't need this, since
 curl doesn't quarantine what it downloads.
+
+On Windows, compare `(Get-FileHash gander-windows-x64.exe).Hash` with its line in `SHA256SUMS`,
+then run `.\gander-windows-x64.exe self install`. gander isn't code-signed, so SmartScreen warns
+about a copy downloaded in a browser; `Unblock-File gander-windows-x64.exe` clears that.
+install.ps1's download isn't marked, so it doesn't need this.
 
 ## Use
 
