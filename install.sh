@@ -95,6 +95,12 @@ sha256() {
 	echo "${sum%% *}"
 }
 
+cleanup() {
+	rm -f "$file" "$sums"
+	if [ -n "$made_bin" ]; then rmdir "$bin" 2>/dev/null || true; fi
+	if [ -n "$made_home" ]; then rmdir "$home" 2>/dev/null || true; fi
+}
+
 main() {
 	t=$(target) || exit 1
 	asset=gander-$t
@@ -109,6 +115,15 @@ main() {
 	*) fail "set GANDER_HOME to a writable absolute folder (HOME isn't set)" ;;
 	esac
 	bin=$home/bin
+	# Into gander's own folder, not /tmp, which may be noexec.
+	file=$bin/.gander-install-$$
+	sums=$bin/.gander-install-$$.sums
+	# A failed install takes back the folders it made, so they don't look like an
+	# install; rmdir keeps any that now hold gander.
+	made_home= made_bin=
+	[ -d "$home" ] || made_home=1
+	[ -d "$bin" ] || made_bin=1
+	trap cleanup EXIT
 	mkdir -p "$bin" || fail "set GANDER_HOME to a writable absolute folder; can't create $bin"
 
 	if [ -n "${GANDER_VERSION:-}" ]; then
@@ -118,10 +133,6 @@ main() {
 	fi
 	say "Downloading gander $tag for $t"
 
-	# Into gander's own folder, not /tmp, which may be noexec.
-	file=$bin/.gander-install-$$
-	sums=$bin/.gander-install-$$.sums
-	trap 'rm -f "$file" "$sums"' EXIT
 	fetch "$repo/releases/download/$tag/$asset" "$file"
 	fetch "$repo/releases/download/$tag/SHA256SUMS" "$sums"
 
