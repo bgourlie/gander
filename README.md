@@ -20,7 +20,16 @@ startup files, and installs the latest Goose. Open a new terminal, or run
 - `GANDER_HOME=/some/folder` installs there instead; `GANDER_VERSION=v0.1.0` installs that
   release of gander.
 
-On Windows (x64, or Arm from Windows 11), in PowerShell:
+Windows support (x64, or Arm from Windows 11) is in a release candidate, v0.3.0-rc.1. The
+latest release has no Windows build yet, so install the release candidate by name, in
+PowerShell:
+
+```powershell
+$env:GANDER_VERSION = 'v0.3.0-rc.1'
+irm https://github.com/bgourlie/gander/releases/download/v0.3.0-rc.1/install.ps1 | iex
+```
+
+Once Windows support is in a full release, this will be:
 
 ```powershell
 irm https://github.com/bgourlie/gander/releases/latest/download/install.ps1 | iex
