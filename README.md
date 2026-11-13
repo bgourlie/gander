@@ -35,6 +35,10 @@ terminals and editors started afterwards.
 - Windows searches the system PATH before yours, so a `goose` installed for all users comes
   first. `gander doctor` names it.
 
+**Microsoft Defender** currently flags `gander.exe` as a virus (`Trojan:Win32/Bearfoos.A!ml`)
+and quarantines it after the install. The detection is a false positive, and I'm working on a
+way to address it.
+
 ### In GitHub Actions and Docker
 
 **GitHub Actions:** each step runs in a new shell that doesn't read your startup files, so the
