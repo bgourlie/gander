@@ -46,15 +46,20 @@
     $madeRoot = -not (Test-Path -LiteralPath $root)
     $madeBin = -not (Test-Path -LiteralPath $bin)
 
-    # Get-Download tries three times when the network fails, as install.sh's curl --retry 3
-    # does, but not when GitHub answers with an error such as 404.
+    # Get-Download tries three times when the network fails or GitHub answers 408, 429 or
+    # 5xx, as install.sh's curl --retry 3 does, but not on another error such as 404. The
+    # Response is looked up, since reading a missing property fails under Set-StrictMode.
     function Get-Download([string]$url, [string]$dest) {
         for ($try = 1; ; $try++) {
             try {
                 Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
                 return
             } catch {
-                if ($try -ge 3 -or $_.Exception.Response) {
+                $status = 0
+                $response = $_.Exception.PSObject.Properties['Response']
+                if ($response -and $response.Value) { $status = [int]$response.Value.StatusCode }
+                $passing = $status -eq 0 -or $status -eq 408 -or $status -eq 429 -or $status -ge 500
+                if ($try -ge 3 -or -not $passing) {
                     throw "gander: can't download ${url}: $($_.Exception.Message)"
                 }
                 Start-Sleep -Seconds $try
@@ -120,7 +125,8 @@
     }
 
     # "gander self install" changed PATH for new terminals; this one is already open.
-    if ($args -notcontains '--no-modify-path' -and ($env:Path -split ';') -notcontains $bin) {
+    # Every form Go's flag package reads as --no-modify-path, case aside.
+    if (-not ($args -match '^--?no-modify-path(=(1|t|true))?$') -and ($env:Path -split ';') -notcontains $bin) {
         $env:Path = "$bin;$env:Path"
         Write-Host "gander and goose work in this window too."
     }

@@ -207,7 +207,7 @@ const hello = "fn main() {\n    print(\"hello from gander doctor\");\n}\n"
 func buildCheck(ctx context.Context, env Env, compiler string) Check {
 	c := Check{Name: "build", Summary: "goose can't build a program"}
 	dir := filepath.Join(env.Home.VersionsDir(), ".doctor")
-	defer os.RemoveAll(dir)
+	defer fsutil.RemoveAll(dir)
 	src := filepath.Join(dir, "hello.goose")
 	exe := filepath.Join(dir, home.ExeName("hello"))
 	if err := os.MkdirAll(dir, 0o755); err != nil {

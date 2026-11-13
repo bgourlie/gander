@@ -130,7 +130,7 @@ func (in *Installer) install(ctx context.Context, v version.Version) error {
 	if err != nil {
 		return fmt.Errorf("can't create a staging folder in %s: %w", in.Home.VersionsDir(), err)
 	}
-	defer os.RemoveAll(stage)
+	defer fsutil.RemoveAll(stage)
 
 	archive := filepath.Join(stage, name)
 	if err := in.download(ctx, v, name, archive, want, wantFrom); err != nil {

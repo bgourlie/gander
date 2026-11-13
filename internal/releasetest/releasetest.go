@@ -54,9 +54,9 @@ type Release struct {
 	Files []File
 }
 
-// Script is a fake compiler. It prints $REPORT for "version", and otherwise prints its
+// script is a fake compiler. It prints $REPORT for "version", and otherwise prints its
 // $0 and arguments, one per line, and exits with GOOSE_TEST_EXIT.
-const Script = `#!/bin/sh
+const script = `#!/bin/sh
 if [ "$1" = version ]; then echo "$REPORT"; exit 0; fi
 echo "argv0=$0"
 for a in "$@"; do echo "arg=$a"; done
@@ -66,7 +66,7 @@ exit ${GOOSE_TEST_EXIT:-0}
 // Tree is the default contents of a fake release.
 func Tree(report string) []File {
 	return []File{
-		{Name: "goose", Body: strings.Replace(Script, "$REPORT", report, 1), Mode: 0o755},
+		{Name: "goose", Body: strings.Replace(script, "$REPORT", report, 1), Mode: 0o755},
 		{Name: "stdlib/", Mode: 0o755},
 		{Name: "stdlib/std.goose", Body: "// std\n", Mode: 0o644},
 		{Name: "docs/", Mode: 0o755},

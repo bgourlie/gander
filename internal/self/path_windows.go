@@ -130,7 +130,7 @@ func replace(src, dst string) error {
 		return err
 	}
 	if err := fsutil.Rename(src, dst); err != nil {
-		os.Rename(aside, dst)
+		fsutil.Rename(aside, dst)
 		return err
 	}
 	os.Remove(aside)
