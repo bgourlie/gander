@@ -74,6 +74,7 @@ gander pin v2026.4       # use it in this folder and below, via .goose-version
 gander default v2026.4   # use it everywhere else
 gander list              # installed versions; --available for every release
 gander current           # the version in use here, and why
+gander doctor            # check that goose can build here, and what to fix if not
 ```
 
 `goose` picks its version from, highest first: a leading `+version` argument

@@ -66,7 +66,7 @@ token, so the API's limit is 60 requests an hour per IP address.
 | `gander current` | The version in use here, why, and its path. |
 | `gander dir` | The folder of the version in use (its `docs/`, `samples/`). |
 | `gander uninstall <version>` | Removes it. Uninstalling the default clears the default. |
-| `gander doctor` | Checks PATH order, other `goose` binaries, `GOOSE_STDLIB`/`GOOSE_TCCLIB`, OS minimums, and the active version's `goose toolchain --json`. |
+| `gander doctor` | Checks the version in use, which `goose` comes first on PATH, `GOOSE_STDLIB`/`GOOSE_TCCLIB`, the OS minimums, and the C compiler the version's `goose toolchain --json` reports; then builds and runs hello world with it. On macOS, a failed build is tried again with the selected developer tools' SDK, to name the fix when the default SDK doesn't suit them. Exits 1 on any problem. |
 | `gander self install [--no-modify-path]` | Copies the running gander to `<home>/bin` with `goose` beside it, and puts that folder on PATH; installs the latest Goose if there's no default. `install.sh` runs it, and running it again repairs an install. |
 | `gander self update [version]` | Updates the gander in `<home>/bin` to the latest release, never older unless a version is named. |
 | `gander self uninstall [-y]` | Removes gander's PATH setup, then only what gander made in `<home>`, versions included. |
@@ -85,6 +85,8 @@ Say "version", never "toolchain": `goose toolchain` is Goose's command for the C
   versions/<tag>/        an unpacked release; complete only once .gander-installed exists
   versions/<tag>.lock    held while that version installs or uninstalls; never deleted
   versions/.tmp-<tag>_*/ staging for an install or removal; swept only under <tag>'s lock
+  versions/.doctor/      the program doctor builds, at a fixed path so Goose reuses one
+                         build folder in GOOSE_HOME; removed when doctor is done
 ```
 
 `_` can't appear in a tag, so one version's staging pattern never matches another's.
@@ -134,6 +136,7 @@ internal/
   lock/          per-version file locks (flock; LockFileEx on Windows)
   proxy/         gander as goose: Prepare picks and installs, then run_<os>.go execs
   cli/           gander's commands
+  doctor/        gander doctor's checks, and on macOS the SDK retry
   self/          gander installing, updating and removing itself; the env script and
                  startup-file blocks
   fsutil/        write a new file and rename it into place
@@ -144,7 +147,7 @@ install.sh       the curl | sh installer
 .github/workflows/release.yml   builds and publishes a release when a v* tag is pushed
 ```
 
-Not built yet: the Windows proxy (`proxy/run_windows.go` is a stub), `doctor`, `update`, and
+Not built yet: the Windows proxy (`proxy/run_windows.go` is a stub), `update`, and
 on Windows `install.ps1`, PATH in the registry and self-update. The Linux-only code (the glibc
 check, the exec error translation, the NixOS hint) and the Windows code compile and pass vet,
 but have never run.

@@ -5,6 +5,7 @@
 //	<home>/default                 one line: the default version
 //	<home>/versions/<tag>/         an unpacked release, complete once .gander-installed exists
 //	<home>/versions/<tag>.lock     held while that version installs
+//	<home>/versions/.doctor/       the program "gander doctor" builds, while it runs
 package home
 
 import (
