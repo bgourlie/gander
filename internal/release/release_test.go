@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +67,27 @@ func TestAPIErrors(t *testing.T) {
 	}
 	if _, err := c.LatestVersion(context.Background()); !errors.As(err, &rl) {
 		t.Errorf("LatestVersion while rate limited = %v, want a RateLimitError", err)
+	}
+}
+
+// Once the network's limit without a token is used up, GITHUB_TOKEN still gets answers,
+// and a rate limit or a refused token names it.
+func TestToken(t *testing.T) {
+	srv := releasetest.New(t, releasetest.Release{Tag: "v2026.4"})
+	srv.RequireToken("good")
+	c := srv.Client()
+	v := version.MustParse("v2026.4")
+	var rl *release.RateLimitError
+	if _, err := c.Get(context.Background(), v); !errors.As(err, &rl) || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+		t.Errorf("Get without a token = %v, want a RateLimitError naming GITHUB_TOKEN", err)
+	}
+	c.Token = "good"
+	if _, err := c.Get(context.Background(), v); err != nil {
+		t.Errorf("Get with the token: %v", err)
+	}
+	c.Token = "expired"
+	if _, err := c.LatestVersion(context.Background()); err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+		t.Errorf("LatestVersion with a bad token = %v, want an error naming GITHUB_TOKEN", err)
 	}
 }
 
