@@ -118,7 +118,8 @@ type Server struct {
 	*httptest.Server
 	Releases []Release
 
-	// RateLimited makes every API request fail as GitHub's rate limit does.
+	// RateLimited makes every API request without the accepted token fail as GitHub's
+	// rate limit does.
 	RateLimited atomic.Bool
 
 	mu           sync.Mutex
@@ -337,10 +338,9 @@ func (s *Server) apiRelease(r Release) apiRelease {
 	return out
 }
 
-// RequireToken makes the API answer only requests that carry token, as GitHub does once
-// a network's limit without one is used up: requests without a token are rate limited,
-// and those with another are refused as bad credentials.
-func (s *Server) RequireToken(token string) {
+// AcceptToken makes the API accept token, which RateLimited doesn't hold back, and
+// refuse any other token as bad credentials, as GitHub does.
+func (s *Server) AcceptToken(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.token = token
@@ -351,11 +351,11 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request, p string) {
 	token := s.token
 	s.mu.Unlock()
 	auth := r.Header.Get("Authorization")
-	if token != "" && auth != "" && auth != "Bearer "+token {
+	if auth != "" && auth != "Bearer "+token {
 		http.Error(w, `{"message":"Bad credentials"}`, http.StatusUnauthorized)
 		return
 	}
-	if s.RateLimited.Load() || token != "" && auth == "" {
+	if s.RateLimited.Load() && auth == "" {
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10))
 		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
