@@ -46,11 +46,19 @@
     $madeRoot = -not (Test-Path -LiteralPath $root)
     $madeBin = -not (Test-Path -LiteralPath $bin)
 
+    # Get-Download tries three times when the network fails, as install.sh's curl --retry 3
+    # does, but not when GitHub answers with an error such as 404.
     function Get-Download([string]$url, [string]$dest) {
-        try {
-            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
-        } catch {
-            throw "gander: can't download ${url}: $($_.Exception.Message)"
+        for ($try = 1; ; $try++) {
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+                return
+            } catch {
+                if ($try -ge 3 -or $_.Exception.Response) {
+                    throw "gander: can't download ${url}: $($_.Exception.Message)"
+                }
+                Start-Sleep -Seconds $try
+            }
         }
     }
 
@@ -64,6 +72,9 @@
             # SHA256SUMS come from the same release even if one is published meanwhile.
             $req = [System.Net.HttpWebRequest]::Create("$repo/releases/latest")
             $req.AllowAutoRedirect = $false
+            # Left open, its connection can go to the first download after GitHub has
+            # closed it: "The connection was closed unexpectedly".
+            $req.KeepAlive = $false
             try {
                 $resp = $req.GetResponse()
             } catch {
